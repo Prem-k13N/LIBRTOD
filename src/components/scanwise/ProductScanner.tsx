@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import Image from 'next/image';
+// import Image from 'next/image'; // Image component no longer needed for camera feed
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Camera, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, ScanLine } from 'lucide-react';
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, ScanLine, CameraOff } from 'lucide-react'; // Replaced Camera with Video, Added CameraOff
 import { getProductDescriptionAction } from '@/app/actions';
 import { useToast } from "@/hooks/use-toast";
 
@@ -43,13 +43,49 @@ export default function ProductScanner() {
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentTimestamp, setCurrentTimestamp] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null); // null initially, then true/false
   const { toast } = useToast();
 
   useEffect(() => {
-    // Generate timestamp client-side to avoid hydration mismatch for placeholder image
-    setCurrentTimestamp(new Date().getTime().toString());
-  }, []);
+    const getCameraPermission = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('Camera API not supported by this browser.');
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Not Supported',
+          description: 'Your browser does not support camera access. Please try a different browser.',
+        });
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error('Error accessing camera:', err);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use ScanWise.',
+        });
+      }
+    };
+
+    getCameraPermission();
+
+    // Cleanup function to stop video stream when component unmounts
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [toast]);
 
 
   const form = useForm<ProductScanFormData>({
@@ -64,7 +100,7 @@ export default function ProductScanner() {
     setIsLoading(true);
     setError(null);
     // Keep previous productInfo visible while loading new one, or clear it:
-    // setProductInfo(null); 
+    // setProductInfo(null);
 
     const result = await getProductDescriptionAction({
       productName: data.productName,
@@ -74,7 +110,7 @@ export default function ProductScanner() {
     if (result.success && result.data) {
       setProductInfo({ name: data.productName, description: result.data.description });
       // Optionally reset the form or parts of it
-      // form.reset({ productName: data.productName, contextClues: '' }); 
+      // form.reset({ productName: data.productName, contextClues: '' });
     } else {
       setError(result.error || "Failed to get product description.");
       setProductInfo(null); // Clear previous results on error
@@ -93,52 +129,61 @@ export default function ProductScanner() {
     form.setValue('contextClues', detectedObject.clues, { shouldValidate: true });
     
     toast({
-      title: "Object Detected",
+      title: "Object Detected (Simulated)",
       description: `Product fields populated with: ${detectedObject.name}`,
     });
   };
 
   return (
     <div className="grid md:grid-cols-5 gap-8 items-start">
-      {/* Simulated Camera View (takes 2/5 width on md screens) */}
+      {/* Live Camera View (takes 2/5 width on md screens) */}
       <Card className="md:col-span-2 shadow-xl border-border/80 rounded-lg overflow-hidden">
         <CardHeader className="bg-card/50 border-b border-border/60 p-4">
           <CardTitle className="flex items-center text-lg">
-            <Camera className="mr-2 h-5 w-5 text-primary" />
-            Camera Simulation
+            <Video className="mr-2 h-5 w-5 text-primary" />
+            Live Camera Feed
           </CardTitle>
           <CardDescription className="text-sm !mt-1">
-            Illustrative live camera feed.
+            Your camera feed is shown below.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
           <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70">
-            {currentTimestamp ? (
-                 <Image
-                    src={`https://placehold.co/600x450.png?t=${currentTimestamp}`} // 4:3 aspect ratio
-                    alt="Simulated camera feed"
-                    width={600}
-                    height={450}
-                    className="object-cover w-full h-full"
-                    priority // Prioritize loading this image
-                    data-ai-hint="retail products" 
-                 />
-            ) : (
+            {hasCameraPermission === null && ( // Still checking permission
                 <Skeleton className="w-full h-full aspect-[4/3]" />
             )}
+            <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+
+            {hasCameraPermission === false && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 p-4 text-center">
+                    <CameraOff className="h-12 w-12 text-destructive mb-2" />
+                    <p className="font-semibold text-destructive">Camera Access Denied</p>
+                    <p className="text-xs text-muted-foreground">Please enable camera permissions in your browser settings.</p>
+                </div>
+            )}
           </div>
+          
           <Button 
             type="button" 
             onClick={handleSimulateScan} 
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || hasCameraPermission === false} // Disable if no camera or loading
           >
             <ScanLine className="mr-2 h-5 w-5" />
-            Simulate Object Scan
+            Simulate Object Scan from Feed
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Click "Simulate Object Scan" to auto-fill product details.
+            Click "Simulate Object Scan" to auto-fill product details based on a mock detection.
           </p>
+          {hasCameraPermission === false && (
+             <Alert variant="destructive" className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Camera Access Required</AlertTitle>
+                <AlertDescription>
+                    Camera access is denied or not available. The live feed cannot be displayed. You can still simulate a scan.
+                </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
@@ -248,3 +293,4 @@ export default function ProductScanner() {
   );
 }
 
+    
