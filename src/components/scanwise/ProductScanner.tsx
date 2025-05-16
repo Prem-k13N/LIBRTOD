@@ -36,6 +36,7 @@ interface MedicineScanResult {
   type: 'medicine';
   name: string;
   usage: string;
+  howToUse?: string;
   commonBrands?: string;
   precautions?: string;
   disclaimer?: string;
@@ -244,6 +245,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
           type: 'medicine',
           name: result.data.medicineName,
           usage: result.data.usage,
+          howToUse: result.data.howToUse,
           commonBrands: result.data.commonBrands,
           precautions: result.data.precautions,
           disclaimer: t('productScanner.importantDisclaimerText')
@@ -465,6 +467,12 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.typicalUsageLabel')}</h3>
                 <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.usage}</p>
               </div>
+              {scanResult.howToUse && (
+                <div>
+                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.howToUseLabel')}</h3>
+                  <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.howToUse}</p>
+                </div>
+              )}
               {scanResult.commonBrands && (
                 <div>
                   <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.commonBrandNamesLabel')}</h3>
@@ -493,3 +501,4 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     </div>
   );
 }
+
