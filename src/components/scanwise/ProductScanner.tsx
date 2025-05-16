@@ -120,7 +120,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       return;
     }
 
-    const result = await detectObjectAction({ imageDataUri });
+    const result = await detectObjectAction({ imageDataUri, language }); // Pass language here
 
     if (result.success && result.data) {
       form.setValue('itemName', result.data.objectName, { shouldValidate: true });
@@ -275,6 +275,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 onClick={() => setDetectionBehavior('auto')}
                 disabled={hasCameraPermission !== true || isDetectingObject}
                 className="text-xs px-3 py-1 h-auto"
+                suppressHydrationWarning={true}
               >
                 {t('productScanner.autoButton')}
               </Button>
@@ -284,6 +285,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 onClick={() => setDetectionBehavior('manual')}
                 disabled={hasCameraPermission !== true || isDetectingObject}
                 className="text-xs px-3 py-1 h-auto"
+                suppressHydrationWarning={true}
               >
                 {t('productScanner.manualButton')}
               </Button>
@@ -387,7 +389,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                         {t('productScanner.contextCluesLabel')}
                       </FormLabel>
                       <FormControl>
-                        <Textarea placeholder={t('productScanner.contextCluesPlaceholder')} {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
+                        <Textarea placeholder={t('productScanner.contextCluesPlaceholder')} {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject} suppressHydrationWarning={true} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
