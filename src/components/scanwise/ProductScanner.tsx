@@ -2,7 +2,7 @@
 // src/components/scanwise/ProductScanner.tsx
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Aperture } from 'lucide-react'; // Added Aperture
-import { getProductDescriptionAction, detectObjectAction } from '@/app/actions'; // Added detectObjectAction
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff } from 'lucide-react';
+import { getProductDescriptionAction, detectObjectAction } from '@/app/actions';
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -30,16 +30,87 @@ interface ProductInfo {
   description: string;
 }
 
+const AUTO_DETECT_INTERVAL = 7000; // 7 seconds
+
 export default function ProductScanner() {
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // For description generation
-  const [error, setError] = useState<string | null>(null); // For description generation
+  const [isLoadingDescription, setIsLoadingDescription] = useState(false); // For description generation
+  const [descriptionError, setDescriptionError] = useState<string | null>(null); // For description generation
   const [isDetectingObject, setIsDetectingObject] = useState(false); // For object detection
   const [detectionError, setDetectionError] = useState<string | null>(null); // For object detection
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
+
+  const form = useForm<ProductScanFormData>({
+    resolver: zodResolver(ProductScanSchema),
+    defaultValues: {
+      productName: '',
+      contextClues: '',
+    },
+  });
+
+  const handleAutoDetectObject = useCallback(async () => {
+    if (!videoRef.current || hasCameraPermission !== true || !navigator.mediaDevices) {
+      // console.log("Conditions not met for auto-detection.");
+      return;
+    }
+
+    // console.log("Attempting auto-detection...");
+    setIsDetectingObject(true);
+    // Don't clear detectionError here, let new errors overwrite or successful detection clear it implicitly
+    // setDetectionError(null); // Keep previous error until new status
+
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      const errMsg = 'Failed to capture image from camera (canvas context error).';
+      setDetectionError(errMsg);
+      toast({ variant: 'destructive', title: 'Capture Error', description: errMsg });
+      setIsDetectingObject(false);
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    let imageDataUri: string;
+    try {
+      imageDataUri = canvas.toDataURL('image/jpeg', 0.9);
+    } catch (e) {
+      console.error("Error converting canvas to data URI:", e);
+      const errMsg = 'Failed to process captured image.';
+      setDetectionError(errMsg);
+      toast({ variant: 'destructive', title: 'Image Processing Error', description: errMsg });
+      setIsDetectingObject(false);
+      return;
+    }
+    
+    const result = await detectObjectAction({ imageDataUri });
+
+    if (result.success && result.data) {
+      form.setValue('productName', result.data.objectName, { shouldValidate: true });
+      form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
+      toast({
+        title: 'Object Auto-Detected!',
+        description: `Identified: ${result.data.objectName}. You can now get its AI description.`,
+      });
+      setDetectionError(null); // Clear previous error on success
+    } else {
+      const errorMessage = result.error || 'AI failed to detect object from image.';
+      setDetectionError(errorMessage); // Keep this error displayed
+      // Do not clear form fields, keep last known good detection or user input
+      toast({
+        variant: 'destructive',
+        title: 'Auto-Detection Failed',
+        description: errorMessage,
+      });
+    }
+    setIsDetectingObject(false);
+  }, [hasCameraPermission, form, toast]); // Removed isDetectingObject from deps to avoid loop, guard is inside
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -95,18 +166,45 @@ export default function ProductScanner() {
     };
   }, [toast]);
 
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
 
-  const form = useForm<ProductScanFormData>({
-    resolver: zodResolver(ProductScanSchema),
-    defaultValues: {
-      productName: '',
-      contextClues: '',
-    },
-  });
+    if (hasCameraPermission === true && !isDetectingObject) {
+      // Initial detection attempt shortly after permission is granted and camera is ready
+      const initialDetectionTimeout = setTimeout(() => {
+         if (!isDetectingObject) handleAutoDetectObject();
+      }, 1500); // Delay to allow camera to initialize fully
+
+      intervalId = setInterval(() => {
+        if (!isDetectingObject) { // Check again before calling
+           handleAutoDetectObject();
+        }
+      }, AUTO_DETECT_INTERVAL);
+
+      return () => {
+        clearTimeout(initialDetectionTimeout);
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      };
+    }
+     else if (intervalId) { // Clear interval if conditions are no longer met
+        clearInterval(intervalId);
+     }
+
+
+    return () => { // General cleanup
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      };
+  }, [hasCameraPermission, handleAutoDetectObject, isDetectingObject]);
+
 
   const onSubmitProductDescription: SubmitHandler<ProductScanFormData> = async (data) => {
-    setIsLoading(true);
-    setError(null);
+    setIsLoadingDescription(true);
+    setDescriptionError(null);
+    setProductInfo(null);
 
     const result = await getProductDescriptionAction({
       productName: data.productName,
@@ -116,85 +214,10 @@ export default function ProductScanner() {
     if (result.success && result.data) {
       setProductInfo({ name: data.productName, description: result.data.description });
     } else {
-      setError(result.error || "Failed to get product description.");
+      setDescriptionError(result.error || "Failed to get product description.");
       setProductInfo(null);
     }
-    setIsLoading(false);
-  };
-
-  const handleDetectObject = async () => {
-    if (!videoRef.current || hasCameraPermission !== true) {
-      toast({
-        variant: 'destructive',
-        title: 'Camera Not Ready',
-        description: 'Please ensure camera access is enabled and the feed is active.',
-      });
-      return;
-    }
-
-    setIsDetectingObject(true);
-    setDetectionError(null);
-    // Clear previous product info and form for new detection
-    // setProductInfo(null); // Don't clear product info yet, user might want to compare
-    form.reset({ productName: '', contextClues: ''}); // Reset form for new detection
-
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    // Set canvas dimensions to match video's intrinsic dimensions for best quality
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      const errMsg = 'Failed to capture image from camera (canvas context error).';
-      setDetectionError(errMsg);
-      toast({
-        variant: 'destructive',
-        title: 'Capture Error',
-        description: errMsg,
-      });
-      setIsDetectingObject(false);
-      return;
-    }
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    let imageDataUri: string;
-    try {
-      imageDataUri = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller size, 0.9 quality
-    } catch (e) {
-      console.error("Error converting canvas to data URI:", e);
-      const errMsg = 'Failed to process captured image.';
-       setDetectionError(errMsg);
-      toast({
-        variant: 'destructive',
-        title: 'Image Processing Error',
-        description: errMsg,
-      });
-      setIsDetectingObject(false);
-      return;
-    }
-    
-
-    const result = await detectObjectAction({ imageDataUri });
-
-    if (result.success && result.data) {
-      form.setValue('productName', result.data.objectName, { shouldValidate: true });
-      form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
-      toast({
-        title: 'Object Detected!',
-        description: `Identified: ${result.data.objectName}. You can now get its AI description.`,
-      });
-    } else {
-      const errorMessage = result.error || 'AI failed to detect object from image.';
-      setDetectionError(errorMessage);
-      toast({
-        variant: 'destructive',
-        title: 'Detection Failed',
-        description: errorMessage,
-      });
-    }
-    setIsDetectingObject(false);
+    setIsLoadingDescription(false);
   };
 
 
@@ -207,11 +230,12 @@ export default function ProductScanner() {
             Live Camera Feed
           </CardTitle>
           <CardDescription className="text-sm !mt-1">
-            Your camera feed is shown below. Point it at an object.
+            Point your camera at an object. Detection is automatic.
+            {isDetectingObject && <span className="italic text-primary"> (Detecting...)</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
-          <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70">
+          <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70 relative">
             {hasCameraPermission === null && (
                 <Skeleton className="w-full h-full aspect-[4/3]" />
             )}
@@ -223,31 +247,19 @@ export default function ProductScanner() {
                     <p className="text-xs text-muted-foreground">Please enable camera permissions in your browser settings.</p>
                 </div>
             )}
+             {isDetectingObject && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <svg className="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+            )}
           </div>
           
-          <Button 
-            type="button" 
-            onClick={handleDetectObject} 
-            className="w-full"
-            disabled={isLoading || hasCameraPermission !== true || isDetectingObject}
-          >
-            {isDetectingObject ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Detecting...
-              </>
-            ) : (
-              <>
-                <Aperture className="mr-2 h-5 w-5" />
-                Detect Object
-              </>
-            )}
-          </Button>
+          {/* Button removed for automatic detection */}
           <p className="text-xs text-muted-foreground text-center">
-            Point your camera at an object and click "Detect Object" to try and identify it.
+            Object detection will occur automatically if the camera is active. Results will appear in the form.
           </p>
           {detectionError && (
             <Alert variant="destructive" className="mt-2">
@@ -256,12 +268,12 @@ export default function ProductScanner() {
               <AlertDescription>{detectionError}</AlertDescription>
             </Alert>
           )}
-          {hasCameraPermission === false && !detectionError && ( // Show only if no other detection error is active
+          {hasCameraPermission === false && !detectionError && (
              <Alert variant="destructive" className="mt-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Camera Access Required</AlertTitle>
                 <AlertDescription>
-                    Camera access is denied or not available. The live feed cannot be displayed.
+                    Camera access is denied or not available. The live feed and auto-detection cannot function.
                 </AlertDescription>
             </Alert>
           )}
@@ -275,7 +287,7 @@ export default function ProductScanner() {
               <ScanSearch className="mr-2 h-5 w-5 text-primary" />
               Product Scanner
             </CardTitle>
-            <CardDescription className="text-sm !mt-1">Use the camera to detect an object, then get its AI-generated description.</CardDescription>
+            <CardDescription className="text-sm !mt-1">Object details are auto-detected. Then, get an AI-generated description.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
@@ -312,8 +324,8 @@ export default function ProductScanner() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading || isDetectingObject || !form.getValues("productName")}>
-                  {isLoading ? (
+                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoadingDescription || isDetectingObject || !form.getValues("productName")}>
+                  {isLoadingDescription ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -332,7 +344,7 @@ export default function ProductScanner() {
           </CardContent>
         </Card>
 
-        {isLoading && !productInfo && (
+        {isLoadingDescription && !productInfo && (
           <Card className="shadow-lg border-border/80 rounded-lg animate-pulse">
             <CardHeader className="p-4">
               <Skeleton className="h-6 w-1/2" />
@@ -346,11 +358,11 @@ export default function ProductScanner() {
           </Card>
         )}
 
-        {error && ( // This is for description generation error
+        {descriptionError && (
           <Alert variant="destructive" className="shadow-md border-destructive/50 rounded-lg">
             <AlertTriangle className="h-5 w-5" />
             <AlertTitle className="font-semibold">Description Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{descriptionError}</AlertDescription>
           </Alert>
         )}
 
@@ -372,3 +384,4 @@ export default function ProductScanner() {
     </div>
   );
 }
+
