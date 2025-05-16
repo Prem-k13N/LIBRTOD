@@ -7,7 +7,7 @@ export default function HomePage() {
       <div className="flex-grow w-full p-4 md:p-8 flex flex-col items-center">
         <header className="my-8 md:my-12 text-center">
           <div className="flex items-center justify-center mb-2">
-            {/* Using a simple SVG logo for ScanWise */}
+            {/* Using a simple SVG logo - can remain generic or be updated later if a specific LIBRTOD logo is available */}
             <svg
               width="48"
               height="48"
@@ -41,7 +41,7 @@ export default function HomePage() {
               />
             </svg>
             <h1 className="text-4xl md:text-5xl font-bold ml-3 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              ScanWise
+              LIBRTOD
             </h1>
           </div>
           <p className="text-lg text-muted-foreground">
@@ -53,7 +53,7 @@ export default function HomePage() {
         </main>
       </div>
       <footer className="w-full py-6 text-center text-sm text-muted-foreground border-t">
-        <p>&copy; {new Date().getFullYear()} ScanWise. Crafted with AI.</p>
+        <p>&copy; {new Date().getFullYear()} LIBRTOD. Crafted with AI.</p>
       </footer>
     </div>
   );

@@ -150,7 +150,7 @@ export default function ProductScanner() {
              toast({
                 variant: 'destructive',
                 title: 'Camera Access Denied',
-                description: 'Please enable camera permissions in your browser settings to use ScanWise.',
+                description: 'Please enable camera permissions in your browser settings to use LIBRTOD.',
              });
         }
       }
@@ -384,4 +384,3 @@ export default function ProductScanner() {
     </div>
   );
 }
-

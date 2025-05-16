@@ -5,8 +5,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Added Toaster
 
 export const metadata: Metadata = {
-  title: 'ScanWise', // Updated title
-  description: 'Identify products and get detailed descriptions with ScanWise.',
+  title: 'LIBRTOD', // Updated title
+  description: 'Identify products and get detailed descriptions with LIBRTOD.', // Updated description
 };
 
 export default function RootLayout({
