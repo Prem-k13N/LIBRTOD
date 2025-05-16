@@ -10,7 +10,7 @@ import { useLanguage, Language } from '@/contexts/LanguageContext';
 export type DetectionMode = 'general' | 'medicine';
 
 export default function HomePage() {
-  const [currentMode, setCurrentMode] = useState<DetectionMode>('general');
+  const [currentMode, setCurrentMode] = useState<DetectionMode>('medicine'); // Default to medicine mode
   const { language, setLanguage, t } = useLanguage();
 
   const handleLanguageChange = (lang: Language) => {
@@ -80,14 +80,7 @@ export default function HomePage() {
             </Button>
           </div>
           <div className="flex justify-center space-x-4 mb-8">
-            <Button
-              variant={currentMode === 'general' ? 'default' : 'outline'}
-              onClick={() => setCurrentMode('general')}
-              className="px-6 py-3 text-base rounded-lg shadow-md hover:shadow-lg transition-shadow"
-              suppressHydrationWarning={true}
-            >
-              <ShoppingBag className="mr-2 h-5 w-5" /> {t('generalItemsButton')}
-            </Button>
+            {/* General Items button removed */}
             <Button
               variant={currentMode === 'medicine' ? 'default' : 'outline'}
               onClick={() => setCurrentMode('medicine')}
