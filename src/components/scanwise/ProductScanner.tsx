@@ -100,9 +100,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      const errMsg = 'Failed to capture image from camera (canvas context error).'; // TODO: Translate
+      const errMsg = t('productScanner.captureErrorCanvas');
       setDetectionError(errMsg);
-      toast({ variant: 'destructive', title: 'Capture Error', description: errMsg }); // TODO: Translate
+      toast({ variant: 'destructive', title: t('productScanner.captureErrorTitle'), description: errMsg });
       setIsDetectingObject(false);
       return;
     }
@@ -113,9 +113,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       imageDataUri = canvas.toDataURL('image/jpeg', 0.9);
     } catch (e) {
       console.error("Error converting canvas to data URI:", e);
-      const errMsg = 'Failed to process captured image.'; // TODO: Translate
+      const errMsg = t('productScanner.imageProcessingError');
       setDetectionError(errMsg);
-      toast({ variant: 'destructive', title: 'Image Processing Error', description: errMsg }); // TODO: Translate
+      toast({ variant: 'destructive', title: t('productScanner.imageProcessingErrorTitle'), description: errMsg });
       setIsDetectingObject(false);
       return;
     }
@@ -126,23 +126,23 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       form.setValue('itemName', result.data.objectName, { shouldValidate: true });
       form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
       toast({
-        title: "Object Detected!", // TODO: Translate
-        description: `Identified: ${result.data.objectName}. You can now get its AI details.`, // TODO: Translate
+        title: t('productScanner.objectDetectedToastTitle'),
+        description: t('productScanner.objectDetectedToastDescription', result.data.objectName),
       });
       setDetectionError(null);
     } else {
-      const errorMessage = result.error || 'AI failed to detect object from image.'; // TODO: Translate
+      const errorMessage = result.error || t('productScanner.aiFailedToDetectError');
       setDetectionError(errorMessage);
       if (detectionBehavior === 'manual') {
         toast({
             variant: 'destructive',
-            title: "Detection Failed", // TODO: Translate
+            title: t('productScanner.detectionFailedToastTitle'),
             description: errorMessage,
         });
       }
     }
     setIsDetectingObject(false);
-  }, [hasCameraPermission, form, toast, isDetectingObject, detectionBehavior, mode]);
+  }, [hasCameraPermission, form, toast, isDetectingObject, detectionBehavior, mode, t, language]); // Added t and language
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -151,8 +151,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         setHasCameraPermission(false);
         toast({
           variant: 'destructive',
-          title: 'Camera Not Supported', // TODO: Translate
-          description: 'Your browser does not support camera access. Please try a different browser.', // TODO: Translate
+          title: t('productScanner.cameraNotSupportedTitle'),
+          description: t('productScanner.cameraNotSupportedDescription'),
         });
         return;
       }
@@ -173,8 +173,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             }
             toast({
               variant: 'default',
-              title: 'Using Default Camera', // TODO: Translate
-              description: 'Could not access back camera. Switched to default camera.', // TODO: Translate
+              title: t('productScanner.usingDefaultCameraTitle'),
+              description: t('productScanner.usingDefaultCameraDescription'),
             });
         } catch (fallbackErr) {
              console.error('Error accessing fallback camera:', fallbackErr);
@@ -182,7 +182,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
              toast({
                 variant: 'destructive',
                 title: t('productScanner.cameraAccessDeniedTitle'),
-                description: t('productScanner.cameraAccessDeniedToastDescription', 'LIBRTOD'), // Example, might need refinement in translations.ts
+                description: t('productScanner.cameraAccessDeniedToastDescription'),
              });
         }
       }
@@ -196,7 +196,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [toast, t]); // Added t to dependency array
+  }, [toast, t]); 
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
@@ -235,10 +235,10 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       if (result.success && result.data) {
         setScanResult({ type: 'general', name: data.itemName, description: result.data.description });
       } else {
-        setError(result.error || "Failed to get product description.");
+        setError(result.error || t('productScanner.failedToGetProductDescriptionError'));
       }
     } else if (mode === 'medicine') {
-      const result = await getMedicineInfoAction({ medicineName: data.itemName, language: language }); // Pass language here
+      const result = await getMedicineInfoAction({ medicineName: data.itemName, language: language });
       if (result.success && result.data) {
         setScanResult({
           type: 'medicine',
@@ -249,7 +249,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
           disclaimer: t('productScanner.importantDisclaimerText')
         });
       } else {
-        setError(result.error || "Failed to get medicine information.");
+        setError(result.error || t('productScanner.failedToGetMedicineInfoError'));
       }
     }
     setIsLoading(false);
@@ -321,6 +321,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             disabled={hasCameraPermission !== true || isDetectingObject}
             className="w-full"
             variant="outline"
+            suppressHydrationWarning={true}
           >
             <Camera className="mr-2 h-4 w-4" />
             {detectionBehavior === 'auto' ? t('productScanner.detectOverrideButton') : t('productScanner.detectManuallyButton')}
@@ -370,7 +371,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                         {formLabel}
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder={formPlaceholder} {...field} className="text-base" readOnly={isDetectingObject} />
+                        <Input placeholder={formPlaceholder} {...field} className="text-base" readOnly={isDetectingObject} suppressHydrationWarning={true} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -392,7 +393,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading || isDetectingObject || !form.getValues("itemName")}>
+                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading || isDetectingObject || !form.getValues("itemName")} suppressHydrationWarning={true}>
                   {isLoading ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
