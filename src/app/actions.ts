@@ -1,15 +1,17 @@
+
 // src/app/actions.ts
 "use server";
 
 import { generateProductDescription, type GenerateProductDescriptionInput, type GenerateProductDescriptionOutput } from '@/ai/flows/generate-product-description';
+import { detectObjectFromImage, type DetectObjectFromImageInput, type DetectObjectFromImageOutput } from '@/ai/flows/detect-object-from-image-flow';
 
-interface ActionResult {
+interface ActionResult<T> {
   success: boolean;
-  data?: GenerateProductDescriptionOutput;
+  data?: T;
   error?: string;
 }
 
-export async function getProductDescriptionAction(input: GenerateProductDescriptionInput): Promise<ActionResult> {
+export async function getProductDescriptionAction(input: GenerateProductDescriptionInput): Promise<ActionResult<GenerateProductDescriptionOutput>> {
   try {
     // Basic input validation (could be more sophisticated)
     if (!input.productName || input.productName.trim().length < 2) {
@@ -31,5 +33,23 @@ export async function getProductDescriptionAction(input: GenerateProductDescript
       return { success: false, error: `AI service error: ${error.message}` };
     }
     return { success: false, error: "An unknown error occurred while generating the product description." };
+  }
+}
+
+export async function detectObjectAction(input: DetectObjectFromImageInput): Promise<ActionResult<DetectObjectFromImageOutput>> {
+  try {
+    if (!input.imageDataUri || !input.imageDataUri.startsWith('data:image/')) {
+      return { success: false, error: "Invalid image data provided." };
+    }
+    // Potentially add more validation for image size or type if necessary
+
+    const result = await detectObjectFromImage(input);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in detectObjectAction:", error);
+    if (error instanceof Error) {
+      return { success: false, error: `AI service error: ${error.message}` };
+    }
+    return { success: false, error: "An unknown error occurred while detecting the object." };
   }
 }
