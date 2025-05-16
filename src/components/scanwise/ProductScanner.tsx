@@ -17,6 +17,7 @@ import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, C
 import { getProductDescriptionAction, detectObjectAction, getMedicineInfoAction } from '@/app/actions';
 import type { DetectionMode } from '@/app/page';
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from '@/contexts/LanguageContext'; // Import useLanguage
 
 const ItemScanSchema = z.object({
   itemName: z.string().min(2, { message: "Item name must be at least 2 characters." }).max(100, {message: "Item name must be 100 characters or less."}),
@@ -50,6 +51,7 @@ interface ProductScannerProps {
 }
 
 export default function ProductScanner({ mode }: ProductScannerProps) {
+  const { language, t } = useLanguage(); // Get language and translation function
   const [scanResult, setScanResult] = useState<ScanResult>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +77,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     setScanResult(null);
     setError(null);
     setDetectionError(null);
-    // Optionally reset detectionBehavior to 'auto' when mode changes, or persist it.
-    // setDetectionBehavior('auto'); 
-  }, [mode, form]);
+  }, [mode, form, language]); // Add language to reset dependencies
 
 
   const handleAutoDetectObject = useCallback(async () => {
@@ -86,7 +86,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     }
 
     setIsDetectingObject(true);
-    setDetectionError(null); // Clear previous detection error
+    setDetectionError(null);
 
     const video = videoRef.current;
     if (video.videoWidth === 0 || video.videoHeight === 0) {
@@ -100,9 +100,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      const errMsg = 'Failed to capture image from camera (canvas context error).';
+      const errMsg = 'Failed to capture image from camera (canvas context error).'; // TODO: Translate
       setDetectionError(errMsg);
-      toast({ variant: 'destructive', title: 'Capture Error', description: errMsg });
+      toast({ variant: 'destructive', title: 'Capture Error', description: errMsg }); // TODO: Translate
       setIsDetectingObject(false);
       return;
     }
@@ -113,9 +113,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       imageDataUri = canvas.toDataURL('image/jpeg', 0.9);
     } catch (e) {
       console.error("Error converting canvas to data URI:", e);
-      const errMsg = 'Failed to process captured image.';
+      const errMsg = 'Failed to process captured image.'; // TODO: Translate
       setDetectionError(errMsg);
-      toast({ variant: 'destructive', title: 'Image Processing Error', description: errMsg });
+      toast({ variant: 'destructive', title: 'Image Processing Error', description: errMsg }); // TODO: Translate
       setIsDetectingObject(false);
       return;
     }
@@ -126,25 +126,23 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       form.setValue('itemName', result.data.objectName, { shouldValidate: true });
       form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
       toast({
-        title: 'Object Detected!',
-        description: `Identified: ${result.data.objectName}. You can now get its AI details.`,
+        title: "Object Detected!", // TODO: Translate
+        description: `Identified: ${result.data.objectName}. You can now get its AI details.`, // TODO: Translate
       });
       setDetectionError(null);
     } else {
-      const errorMessage = result.error || 'AI failed to detect object from image.';
+      const errorMessage = result.error || 'AI failed to detect object from image.'; // TODO: Translate
       setDetectionError(errorMessage);
-      // Do not show a toast here for auto-detection failures to avoid spamming, error is shown in alert.
-      // Only show toast for manual trigger failures if desired or for consistent feedback.
-      if (detectionBehavior === 'manual') { // Or some other condition for when to toast failure
+      if (detectionBehavior === 'manual') {
         toast({
             variant: 'destructive',
-            title: 'Detection Failed',
+            title: "Detection Failed", // TODO: Translate
             description: errorMessage,
         });
       }
     }
     setIsDetectingObject(false);
-  }, [hasCameraPermission, form, toast, isDetectingObject, detectionBehavior, mode]); // Added mode to dependencies
+  }, [hasCameraPermission, form, toast, isDetectingObject, detectionBehavior, mode]);
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -153,8 +151,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         setHasCameraPermission(false);
         toast({
           variant: 'destructive',
-          title: 'Camera Not Supported',
-          description: 'Your browser does not support camera access. Please try a different browser.',
+          title: 'Camera Not Supported', // TODO: Translate
+          description: 'Your browser does not support camera access. Please try a different browser.', // TODO: Translate
         });
         return;
       }
@@ -175,16 +173,16 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             }
             toast({
               variant: 'default',
-              title: 'Using Default Camera',
-              description: 'Could not access back camera. Switched to default camera.',
+              title: 'Using Default Camera', // TODO: Translate
+              description: 'Could not access back camera. Switched to default camera.', // TODO: Translate
             });
         } catch (fallbackErr) {
              console.error('Error accessing fallback camera:', fallbackErr);
              setHasCameraPermission(false);
              toast({
                 variant: 'destructive',
-                title: 'Camera Access Denied',
-                description: 'Please enable camera permissions in your browser settings to use LIBRTOD.',
+                title: t('productScanner.cameraAccessDeniedTitle'),
+                description: t('productScanner.cameraAccessDeniedToastDescription', 'LIBRTOD'), // Example, might need refinement in translations.ts
              });
         }
       }
@@ -198,7 +196,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [toast]);
+  }, [toast, t]); // Added t to dependency array
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
@@ -240,7 +238,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         setError(result.error || "Failed to get product description.");
       }
     } else if (mode === 'medicine') {
-      const result = await getMedicineInfoAction({ medicineName: data.itemName });
+      const result = await getMedicineInfoAction({ medicineName: data.itemName, language: language }); // Pass language here
       if (result.success && result.data) {
         setScanResult({
           type: 'medicine',
@@ -248,7 +246,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
           usage: result.data.usage,
           commonBrands: result.data.commonBrands,
           precautions: result.data.precautions,
-          disclaimer: "This information is for general knowledge and not a substitute for professional medical advice. Always consult a healthcare provider for medical concerns."
+          disclaimer: t('productScanner.importantDisclaimerText')
         });
       } else {
         setError(result.error || "Failed to get medicine information.");
@@ -257,9 +255,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     setIsLoading(false);
   };
 
-  const formLabel = mode === 'medicine' ? 'Detected Medicine Name' : 'Detected Product Name';
-  const buttonText = mode === 'medicine' ? 'Get Medicine Info' : 'Get AI Description';
-  const formPlaceholder = mode === 'medicine' ? 'e.g., Ibuprofen' : 'e.g., Smart Coffee Maker';
+  const formLabel = mode === 'medicine' ? t('productScanner.detectedMedicineNameLabel') : t('productScanner.detectedProductNameLabel');
+  const buttonText = mode === 'medicine' ? t('productScanner.getMedicineInfoButton') : t('productScanner.getAIDescriptionButton');
+  const formPlaceholder = mode === 'medicine' ? t('productScanner.medicineNamePlaceholder') : t('productScanner.productNamePlaceholder');
 
   return (
     <div className="grid md:grid-cols-5 gap-8 items-start">
@@ -268,7 +266,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
           <div className="flex justify-between items-center mb-1">
             <CardTitle className="flex items-center text-lg">
               <Video className="mr-2 h-5 w-5 text-primary" />
-              Live Camera Feed
+              {t('productScanner.liveCameraFeedTitle')}
             </CardTitle>
             <div className="flex space-x-2">
               <Button
@@ -278,7 +276,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 disabled={hasCameraPermission !== true || isDetectingObject}
                 className="text-xs px-3 py-1 h-auto"
               >
-                Auto
+                {t('productScanner.autoButton')}
               </Button>
               <Button
                 variant={detectionBehavior === 'manual' ? 'default' : 'outline'}
@@ -287,15 +285,15 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 disabled={hasCameraPermission !== true || isDetectingObject}
                 className="text-xs px-3 py-1 h-auto"
               >
-                Manual
+                {t('productScanner.manualButton')}
               </Button>
             </div>
           </div>
           <CardDescription className="text-sm !mt-1">
             {detectionBehavior === 'auto'
-              ? `Automatic detection is active for ${mode} items.`
-              : `Manual detection mode. Point camera and use button below.`}
-            {isDetectingObject && <span className="italic text-primary"> (Detecting...)</span>}
+              ? t('productScanner.autoDetectionActive', mode)
+              : t('productScanner.manualDetectionMode')}
+            {isDetectingObject && <span className="italic text-primary"> {t('productScanner.detectingStatus')}</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
@@ -305,8 +303,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             {hasCameraPermission === false && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 p-4 text-center">
                     <CameraOff className="h-12 w-12 text-destructive mb-2" />
-                    <p className="font-semibold text-destructive">Camera Access Denied</p>
-                    <p className="text-xs text-muted-foreground">Please enable camera permissions.</p>
+                    <p className="font-semibold text-destructive">{t('productScanner.cameraAccessDeniedTitle')}</p>
+                    <p className="text-xs text-muted-foreground">{t('productScanner.cameraAccessDeniedDescription')}</p>
                 </div>
             )}
              {isDetectingObject && (
@@ -325,26 +323,26 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             variant="outline"
           >
             <Camera className="mr-2 h-4 w-4" />
-            {detectionBehavior === 'auto' ? 'Detect Now (Override Auto)' : 'Capture & Detect Manually'}
+            {detectionBehavior === 'auto' ? t('productScanner.detectOverrideButton') : t('productScanner.detectManuallyButton')}
           </Button>
           <p className="text-xs text-muted-foreground text-center">
             {detectionBehavior === 'auto'
-                ? "Auto-detection active. Override or wait for next scan."
-                : "Click the button above to detect an object."
+                ? t('productScanner.autoDetectionHint')
+                : t('productScanner.manualDetectionHint')
             }
           </p>
           {detectionError && (
             <Alert variant="destructive" className="mt-2">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Detection Error</AlertTitle>
+              <AlertTitle>{t('productScanner.detectionErrorTitle')}</AlertTitle>
               <AlertDescription>{detectionError}</AlertDescription>
             </Alert>
           )}
           {hasCameraPermission === false && !detectionError && (
              <Alert variant="destructive" className="mt-4">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>Camera access is needed for detection.</AlertDescription>
+                <AlertTitle>{t('productScanner.cameraAccessRequiredTitle')}</AlertTitle>
+                <AlertDescription>{t('productScanner.cameraAccessRequiredDescription')}</AlertDescription>
             </Alert>
           )}
         </CardContent>
@@ -355,9 +353,9 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
           <CardHeader className="bg-card/50 border-b border-border/60 p-4">
             <CardTitle className="flex items-center text-lg">
               {mode === 'medicine' ? <Pill className="mr-2 h-5 w-5 text-primary" /> : <ScanSearch className="mr-2 h-5 w-5 text-primary" />}
-              {mode === 'medicine' ? 'Medicine Identifier' : 'Item Scanner'}
+              {mode === 'medicine' ? t('productScanner.medicineIdentifierTitle') : t('productScanner.itemScannerTitle')}
             </CardTitle>
-            <CardDescription className="text-sm !mt-1">Detected details appear below. Then, get AI-generated information.</CardDescription>
+            <CardDescription className="text-sm !mt-1">{t('productScanner.formDescription')}</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
@@ -385,10 +383,10 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                     <FormItem>
                       <FormLabel className="flex items-center font-semibold">
                         <Lightbulb className="mr-2 h-4 w-4 text-muted-foreground" />
-                        Context Clues (from detection)
+                        {t('productScanner.contextCluesLabel')}
                       </FormLabel>
                       <FormControl>
-                        <Textarea placeholder="e.g., brand, type, visual cues" {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
+                        <Textarea placeholder={t('productScanner.contextCluesPlaceholder')} {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -401,7 +399,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Generating...
+                      {t('productScanner.generatingButton')}
                     </>
                   ) : (
                     <>
@@ -431,7 +429,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
         {error && (
           <Alert variant="destructive" className="shadow-md border-destructive/50 rounded-lg">
             <AlertTriangle className="h-5 w-5" />
-            <AlertTitle className="font-semibold">Error</AlertTitle>
+            <AlertTitle className="font-semibold">{t('productScanner.errorAlertTitle')}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -445,7 +443,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              <h3 className="font-semibold mb-2 text-base text-muted-foreground">AI Generated Description:</h3>
+              <h3 className="font-semibold mb-2 text-base text-muted-foreground">{t('productScanner.aiGeneratedDescriptionLabel')}</h3>
               <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.description}</p>
             </CardContent>
           </Card>
@@ -461,25 +459,25 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             </CardHeader>
             <CardContent className="p-6 space-y-4">
               <div>
-                <h3 className="font-semibold mb-1 text-base text-muted-foreground">Typical Usage:</h3>
+                <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.typicalUsageLabel')}</h3>
                 <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.usage}</p>
               </div>
               {scanResult.commonBrands && (
                 <div>
-                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">Common Brand Names:</h3>
+                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.commonBrandNamesLabel')}</h3>
                   <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.commonBrands}</p>
                 </div>
               )}
               {scanResult.precautions && (
                 <div>
-                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">General Precautions:</h3>
+                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">{t('productScanner.generalPrecautionsLabel')}</h3>
                   <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.precautions}</p>
                 </div>
               )}
               {scanResult.disclaimer && (
                 <Alert variant="default" className="mt-4 border-blue-500/50 bg-blue-100/70 dark:bg-blue-900/30">
                     <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    <AlertTitle className="text-blue-700 dark:text-blue-300">Important Disclaimer</AlertTitle>
+                    <AlertTitle className="text-blue-700 dark:text-blue-300">{t('productScanner.importantDisclaimerTitle')}</AlertTitle>
                     <AlertDescription className="text-blue-600/90 dark:text-blue-400/90">
                     {scanResult.disclaimer}
                     </AlertDescription>
@@ -492,4 +490,3 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     </div>
   );
 }
-

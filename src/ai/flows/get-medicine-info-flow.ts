@@ -13,6 +13,7 @@ import {z} from 'genkit';
 
 const GetMedicineInfoInputSchema = z.object({
   medicineName: z.string().describe('The name of the medicine to get information about.'),
+  language: z.string().optional().describe('The language for the response, e.g., "en" for English, "mr" for Marathi.'),
 });
 export type GetMedicineInfoInput = z.infer<typeof GetMedicineInfoInputSchema>;
 
@@ -33,12 +34,13 @@ const prompt = ai.definePrompt({
   input: {schema: GetMedicineInfoInputSchema},
   output: {schema: GetMedicineInfoOutputSchema},
   prompt: `You are a helpful AI assistant providing general information about medicines.
+{{#if language}}Respond in {{language}}. If the language is 'mr' (Marathi), ensure the entire response, including labels and the disclaimer, is in Marathi.{{/if}}
 Given the medicine name: {{{medicineName}}}, provide the following information:
 1.  What is this medicine typically used for?
 2.  What are some common brand names, if any? (If none or not applicable, state that)
 3.  Are there any general precautions or important things to note? (Keep this brief and general)
 
-IMPORTANT: Frame your response as general information. You MUST include a disclaimer that this information is not a substitute for professional medical advice and users should consult a healthcare provider for any medical concerns.
+IMPORTANT: Frame your response as general information. You MUST include a disclaimer that this information is not a substitute for professional medical advice and users should consult a healthcare provider for any medical concerns. This disclaimer must also be in the response language if specified.
 Do not provide dosage information or specific treatment plans.
 
 Medicine Name: {{{medicineName}}}
@@ -63,4 +65,3 @@ const getMedicineInfoFlow = ai.defineFlow(
     };
   }
 );
-

@@ -1,13 +1,28 @@
-import type { Metadata } from 'next';
+
+import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Added Toaster
+import { Toaster } from "@/components/ui/toaster";
+import { LanguageProvider } from '@/contexts/LanguageContext';
+import { translations } from '@/lib/translations';
+import { HtmlWrapper } from '@/components/layout/HtmlWrapper'; // Import the new component
 
-export const metadata: Metadata = {
-  title: 'LIBRTOD', // Updated title
-  description: 'Identify products and get detailed descriptions with LIBRTOD.', // Updated description
+export async function generateMetadata(): Promise<Metadata> {
+  const defaultDescription = translations.en.appDescription as string;
+  return {
+    title: 'LIBRTOD',
+    description: defaultDescription,
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F5F7FA' },
+    { media: '(prefers-color-scheme: dark)', color: '#191D23' },
+  ],
 };
+
 
 export default function RootLayout({
   children,
@@ -15,11 +30,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className={`font-sans antialiased`}> {/* Use font-sans which refers to --font-geist-sans */}
-        {children}
-        <Toaster /> {/* Added Toaster */}
-      </body>
-    </html>
+    <LanguageProvider>
+      <HtmlWrapper geistSansVariable={GeistSans.variable} geistMonoVariable={GeistMono.variable}>
+        <body className={`font-sans antialiased`}>
+          {children}
+          <Toaster />
+        </body>
+      </HtmlWrapper>
+    </LanguageProvider>
   );
 }

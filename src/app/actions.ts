@@ -4,7 +4,7 @@
 
 import { generateProductDescription, type GenerateProductDescriptionInput, type GenerateProductDescriptionOutput } from '@/ai/flows/generate-product-description';
 import { detectObjectFromImage, type DetectObjectFromImageInput, type DetectObjectFromImageOutput } from '@/ai/flows/detect-object-from-image-flow';
-import { getMedicineInfo, type GetMedicineInfoInput, type GetMedicineInfoOutput } from '@/ai/flows/get-medicine-info-flow'; // New import
+import { getMedicineInfo, type GetMedicineInfoInput, type GetMedicineInfoOutput } from '@/ai/flows/get-medicine-info-flow';
 
 interface ActionResult<T> {
   success: boolean;
@@ -14,7 +14,6 @@ interface ActionResult<T> {
 
 export async function getProductDescriptionAction(input: GenerateProductDescriptionInput): Promise<ActionResult<GenerateProductDescriptionOutput>> {
   try {
-    // Basic input validation (could be more sophisticated)
     if (!input.productName || input.productName.trim().length < 2) {
       return { success: false, error: "Product name must be at least 2 characters long." };
     }
@@ -24,7 +23,6 @@ export async function getProductDescriptionAction(input: GenerateProductDescript
     if (input.contextClues && input.contextClues.trim().length > 500) {
         return { success: false, error: "Context clues must be 500 characters or less." };
     }
-
 
     const result = await generateProductDescription(input);
     return { success: true, data: result };
@@ -42,7 +40,6 @@ export async function detectObjectAction(input: DetectObjectFromImageInput): Pro
     if (!input.imageDataUri || !input.imageDataUri.startsWith('data:image/')) {
       return { success: false, error: "Invalid image data provided." };
     }
-    // Potentially add more validation for image size or type if necessary
 
     const result = await detectObjectFromImage(input);
     return { success: true, data: result };
@@ -64,6 +61,7 @@ export async function getMedicineInfoAction(input: GetMedicineInfoInput): Promis
         return { success: false, error: "Medicine name must be 100 characters or less." };
     }
 
+    // Language is now part of GetMedicineInfoInput
     const result = await getMedicineInfo(input);
     return { success: true, data: result };
   } catch (error) {
