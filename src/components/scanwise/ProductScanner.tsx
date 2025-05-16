@@ -60,7 +60,8 @@ export default function ProductScanner() {
         return;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Requesting the back camera (environment)
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -68,11 +69,28 @@ export default function ProductScanner() {
       } catch (err) {
         console.error('Error accessing camera:', err);
         setHasCameraPermission(false);
-        toast({
-          variant: 'destructive',
-          title: 'Camera Access Denied',
-          description: 'Please enable camera permissions in your browser settings to use ScanWise.',
-        });
+        // Attempt fallback to any camera if environment facing mode fails
+        try {
+            console.log("Falling back to default camera");
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setHasCameraPermission(true);
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+            toast({
+              variant: 'default',
+              title: 'Using Default Camera',
+              description: 'Could not access back camera. Switched to default camera.',
+            });
+        } catch (fallbackErr) {
+             console.error('Error accessing fallback camera:', fallbackErr);
+             setHasCameraPermission(false);
+             toast({
+                variant: 'destructive',
+                title: 'Camera Access Denied',
+                description: 'Please enable camera permissions in your browser settings to use ScanWise.',
+             });
+        }
       }
     };
 
