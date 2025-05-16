@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Pill, HelpCircle } from 'lucide-react';
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Pill, HelpCircle, Camera } from 'lucide-react'; // Added Camera icon
 import { getProductDescriptionAction, detectObjectAction, getMedicineInfoAction } from '@/app/actions';
 import type { DetectionMode } from '@/app/page';
 import { useToast } from "@/hooks/use-toast";
@@ -284,8 +284,17 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
                 </div>
             )}
           </div>
+          <Button
+            onClick={handleAutoDetectObject}
+            disabled={hasCameraPermission !== true || isDetectingObject}
+            className="w-full"
+            variant="outline"
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Capture & Detect Manually
+          </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Item detection will occur automatically. Results will appear in the form.
+            Alternatively, item detection occurs automatically. Results appear in the form.
           </p>
           {detectionError && (
             <Alert variant="destructive" className="mt-2">
@@ -446,3 +455,4 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     </div>
   );
 }
+
