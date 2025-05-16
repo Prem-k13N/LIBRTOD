@@ -71,7 +71,7 @@ export interface Translations {
 
 export const translations: Record<string, NestedTranslations> = {
   en: {
-    pageSubtitle: 'Instantly identify items and get AI-powered information.',
+    pageSubtitle: 'Instantly identify items.',
     generalItemsButton: 'General Items',
     medicinesButton: 'Medicines',
     footerCopyright: (year: number) => `© ${year} LIBRTOD.`,
@@ -134,7 +134,7 @@ export const translations: Record<string, NestedTranslations> = {
     },
   },
   mr: {
-    pageSubtitle: 'वस्तू त्वरित ओळखा आणि AI-शक्तीवर आधारित माहिती मिळवा.',
+    pageSubtitle: 'वस्तू त्वरित ओळखा.',
     generalItemsButton: 'सामान्य वस्तू',
     medicinesButton: 'औषधे',
     footerCopyright: (year: number) => `© ${year} लिबर्टोड.`,
