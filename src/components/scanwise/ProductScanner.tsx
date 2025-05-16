@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Pill, HelpCircle, Camera } from 'lucide-react'; // Added Camera icon
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Pill, HelpCircle, Camera } from 'lucide-react';
 import { getProductDescriptionAction, detectObjectAction, getMedicineInfoAction } from '@/app/actions';
 import type { DetectionMode } from '@/app/page';
 import { useToast } from "@/hooks/use-toast";
@@ -41,8 +41,9 @@ interface MedicineScanResult {
 }
 
 type ScanResult = GeneralScanResult | MedicineScanResult | null;
+type DetectionBehavior = 'auto' | 'manual';
 
-const AUTO_DETECT_INTERVAL = 7000; 
+const AUTO_DETECT_INTERVAL = 7000;
 
 interface ProductScannerProps {
   mode: DetectionMode;
@@ -50,11 +51,12 @@ interface ProductScannerProps {
 
 export default function ProductScanner({ mode }: ProductScannerProps) {
   const [scanResult, setScanResult] = useState<ScanResult>(null);
-  const [isLoading, setIsLoading] = useState(false); 
-  const [error, setError] = useState<string | null>(null); 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [isDetectingObject, setIsDetectingObject] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [detectionBehavior, setDetectionBehavior] = useState<DetectionBehavior>('auto');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -73,6 +75,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     setScanResult(null);
     setError(null);
     setDetectionError(null);
+    // Optionally reset detectionBehavior to 'auto' when mode changes, or persist it.
+    // setDetectionBehavior('auto'); 
   }, [mode, form]);
 
 
@@ -82,7 +86,8 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     }
 
     setIsDetectingObject(true);
-    
+    setDetectionError(null); // Clear previous detection error
+
     const video = videoRef.current;
     if (video.videoWidth === 0 || video.videoHeight === 0) {
         console.log("Video dimensions not yet available for capture.");
@@ -92,7 +97,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       const errMsg = 'Failed to capture image from camera (canvas context error).';
@@ -114,28 +119,32 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
       setIsDetectingObject(false);
       return;
     }
-    
+
     const result = await detectObjectAction({ imageDataUri });
 
     if (result.success && result.data) {
       form.setValue('itemName', result.data.objectName, { shouldValidate: true });
       form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
       toast({
-        title: 'Object Auto-Detected!',
+        title: 'Object Detected!',
         description: `Identified: ${result.data.objectName}. You can now get its AI details.`,
       });
-      setDetectionError(null); 
+      setDetectionError(null);
     } else {
       const errorMessage = result.error || 'AI failed to detect object from image.';
-      setDetectionError(errorMessage); 
-      toast({
-        variant: 'destructive',
-        title: 'Auto-Detection Failed',
-        description: errorMessage,
-      });
+      setDetectionError(errorMessage);
+      // Do not show a toast here for auto-detection failures to avoid spamming, error is shown in alert.
+      // Only show toast for manual trigger failures if desired or for consistent feedback.
+      if (detectionBehavior === 'manual') { // Or some other condition for when to toast failure
+        toast({
+            variant: 'destructive',
+            title: 'Detection Failed',
+            description: errorMessage,
+        });
+      }
     }
     setIsDetectingObject(false);
-  }, [hasCameraPermission, form, toast, isDetectingObject]);
+  }, [hasCameraPermission, form, toast, isDetectingObject, detectionBehavior, mode]); // Added mode to dependencies
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -193,25 +202,26 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
+    let initialDetectionTimeout: NodeJS.Timeout | null = null;
 
-    if (hasCameraPermission === true && !isDetectingObject) {
-      const initialDetectionTimeout = setTimeout(() => {
-         if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA) handleAutoDetectObject();
-      }, 1500); 
+    if (hasCameraPermission === true && !isDetectingObject && detectionBehavior === 'auto') {
+      initialDetectionTimeout = setTimeout(() => {
+         if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA && detectionBehavior === 'auto') {
+            handleAutoDetectObject();
+         }
+      }, 1500);
 
       intervalId = setInterval(() => {
-        if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA) { 
+        if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA && detectionBehavior === 'auto') {
            handleAutoDetectObject();
         }
       }, AUTO_DETECT_INTERVAL);
-
-      return () => {
-        clearTimeout(initialDetectionTimeout);
-        if (intervalId) clearInterval(intervalId);
-      };
     }
-    return () => { if (intervalId) clearInterval(intervalId); };
-  }, [hasCameraPermission, handleAutoDetectObject, isDetectingObject]);
+    return () => {
+        if (initialDetectionTimeout) clearTimeout(initialDetectionTimeout);
+        if (intervalId) clearInterval(intervalId);
+    };
+  }, [hasCameraPermission, handleAutoDetectObject, isDetectingObject, detectionBehavior]);
 
 
   const onSubmitItemInfo: SubmitHandler<ItemScanFormData> = async (data) => {
@@ -255,12 +265,36 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
     <div className="grid md:grid-cols-5 gap-8 items-start">
       <Card className="md:col-span-2 shadow-xl border-border/80 rounded-lg overflow-hidden">
         <CardHeader className="bg-card/50 border-b border-border/60 p-4">
-          <CardTitle className="flex items-center text-lg">
-            <Video className="mr-2 h-5 w-5 text-primary" />
-            Live Camera Feed
-          </CardTitle>
+          <div className="flex justify-between items-center mb-1">
+            <CardTitle className="flex items-center text-lg">
+              <Video className="mr-2 h-5 w-5 text-primary" />
+              Live Camera Feed
+            </CardTitle>
+            <div className="flex space-x-2">
+              <Button
+                variant={detectionBehavior === 'auto' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDetectionBehavior('auto')}
+                disabled={hasCameraPermission !== true || isDetectingObject}
+                className="text-xs px-3 py-1 h-auto"
+              >
+                Auto
+              </Button>
+              <Button
+                variant={detectionBehavior === 'manual' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDetectionBehavior('manual')}
+                disabled={hasCameraPermission !== true || isDetectingObject}
+                className="text-xs px-3 py-1 h-auto"
+              >
+                Manual
+              </Button>
+            </div>
+          </div>
           <CardDescription className="text-sm !mt-1">
-            Point your camera at an item. Detection is automatic for {mode} items.
+            {detectionBehavior === 'auto'
+              ? `Automatic detection is active for ${mode} items.`
+              : `Manual detection mode. Point camera and use button below.`}
             {isDetectingObject && <span className="italic text-primary"> (Detecting...)</span>}
           </CardDescription>
         </CardHeader>
@@ -291,10 +325,13 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
             variant="outline"
           >
             <Camera className="mr-2 h-4 w-4" />
-            Capture & Detect Manually
+            {detectionBehavior === 'auto' ? 'Detect Now (Override Auto)' : 'Capture & Detect Manually'}
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Alternatively, item detection occurs automatically. Results appear in the form.
+            {detectionBehavior === 'auto'
+                ? "Auto-detection active. Override or wait for next scan."
+                : "Click the button above to detect an object."
+            }
           </p>
           {detectionError && (
             <Alert variant="destructive" className="mt-2">
@@ -307,7 +344,7 @@ export default function ProductScanner({ mode }: ProductScannerProps) {
              <Alert variant="destructive" className="mt-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>Camera access is needed for auto-detection.</AlertDescription>
+                <AlertDescription>Camera access is needed for detection.</AlertDescription>
             </Alert>
           )}
         </CardContent>
