@@ -6,7 +6,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-// import Image from 'next/image'; // Image component no longer needed for camera feed
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,8 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, ScanLine, CameraOff } from 'lucide-react'; // Replaced Camera with Video, Added CameraOff
-import { getProductDescriptionAction } from '@/app/actions';
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Aperture } from 'lucide-react'; // Added Aperture
+import { getProductDescriptionAction, detectObjectAction } from '@/app/actions'; // Added detectObjectAction
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -31,20 +30,15 @@ interface ProductInfo {
   description: string;
 }
 
-const mockDetectedObjects = [
-  { name: 'Organic Red Apple', clues: 'Fresh fruit, grocery item, healthy snack, produce section' },
-  { name: 'Ergonomic Wireless Mouse', clues: 'Computer peripheral, electronics, office accessory, Bluetooth connectivity' },
-  { name: 'Handmade Ceramic Mug', clues: 'Kitchenware, beverage container, artisanal, coffee or tea' },
-  { name: 'Spiral Bound Notebook', clues: 'Stationery, office supplies, for writing or drawing, A5 size' },
-  { name: 'Bluetooth Headphones', clues: 'Audio device, electronics, over-ear, noise-cancelling' },
-];
-
 export default function ProductScanner() {
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false); // For description generation
+  const [error, setError] = useState<string | null>(null); // For description generation
+  const [isDetectingObject, setIsDetectingObject] = useState(false); // For object detection
+  const [detectionError, setDetectionError] = useState<string | null>(null); // For object detection
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null); // null initially, then true/false
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,16 +54,13 @@ export default function ProductScanner() {
         return;
       }
       try {
-        // Requesting the back camera (environment)
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       } catch (err) {
-        console.error('Error accessing camera:', err);
-        setHasCameraPermission(false);
-        // Attempt fallback to any camera if environment facing mode fails
+        console.error('Error accessing environment camera:', err);
         try {
             console.log("Falling back to default camera");
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -96,7 +87,6 @@ export default function ProductScanner() {
 
     getCameraPermission();
 
-    // Cleanup function to stop video stream when component unmounts
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
@@ -114,11 +104,9 @@ export default function ProductScanner() {
     },
   });
 
-  const onSubmit: SubmitHandler<ProductScanFormData> = async (data) => {
+  const onSubmitProductDescription: SubmitHandler<ProductScanFormData> = async (data) => {
     setIsLoading(true);
     setError(null);
-    // Keep previous productInfo visible while loading new one, or clear it:
-    // setProductInfo(null);
 
     const result = await getProductDescriptionAction({
       productName: data.productName,
@@ -127,34 +115,91 @@ export default function ProductScanner() {
 
     if (result.success && result.data) {
       setProductInfo({ name: data.productName, description: result.data.description });
-      // Optionally reset the form or parts of it
-      // form.reset({ productName: data.productName, contextClues: '' });
     } else {
       setError(result.error || "Failed to get product description.");
-      setProductInfo(null); // Clear previous results on error
+      setProductInfo(null);
     }
     setIsLoading(false);
   };
 
-  const handleSimulateScan = () => {
-    setError(null); // Clear previous errors
-    setProductInfo(null); // Clear previous product info
+  const handleDetectObject = async () => {
+    if (!videoRef.current || hasCameraPermission !== true) {
+      toast({
+        variant: 'destructive',
+        title: 'Camera Not Ready',
+        description: 'Please ensure camera access is enabled and the feed is active.',
+      });
+      return;
+    }
 
-    const randomIndex = Math.floor(Math.random() * mockDetectedObjects.length);
-    const detectedObject = mockDetectedObjects[randomIndex];
+    setIsDetectingObject(true);
+    setDetectionError(null);
+    // Clear previous product info and form for new detection
+    // setProductInfo(null); // Don't clear product info yet, user might want to compare
+    form.reset({ productName: '', contextClues: ''}); // Reset form for new detection
 
-    form.setValue('productName', detectedObject.name, { shouldValidate: true });
-    form.setValue('contextClues', detectedObject.clues, { shouldValidate: true });
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    // Set canvas dimensions to match video's intrinsic dimensions for best quality
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     
-    toast({
-      title: "Object Detected (Simulated)",
-      description: `Product fields populated with: ${detectedObject.name}`,
-    });
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      const errMsg = 'Failed to capture image from camera (canvas context error).';
+      setDetectionError(errMsg);
+      toast({
+        variant: 'destructive',
+        title: 'Capture Error',
+        description: errMsg,
+      });
+      setIsDetectingObject(false);
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    let imageDataUri: string;
+    try {
+      imageDataUri = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller size, 0.9 quality
+    } catch (e) {
+      console.error("Error converting canvas to data URI:", e);
+      const errMsg = 'Failed to process captured image.';
+       setDetectionError(errMsg);
+      toast({
+        variant: 'destructive',
+        title: 'Image Processing Error',
+        description: errMsg,
+      });
+      setIsDetectingObject(false);
+      return;
+    }
+    
+
+    const result = await detectObjectAction({ imageDataUri });
+
+    if (result.success && result.data) {
+      form.setValue('productName', result.data.objectName, { shouldValidate: true });
+      form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
+      toast({
+        title: 'Object Detected!',
+        description: `Identified: ${result.data.objectName}. You can now get its AI description.`,
+      });
+    } else {
+      const errorMessage = result.error || 'AI failed to detect object from image.';
+      setDetectionError(errorMessage);
+      toast({
+        variant: 'destructive',
+        title: 'Detection Failed',
+        description: errorMessage,
+      });
+    }
+    setIsDetectingObject(false);
   };
+
 
   return (
     <div className="grid md:grid-cols-5 gap-8 items-start">
-      {/* Live Camera View (takes 2/5 width on md screens) */}
       <Card className="md:col-span-2 shadow-xl border-border/80 rounded-lg overflow-hidden">
         <CardHeader className="bg-card/50 border-b border-border/60 p-4">
           <CardTitle className="flex items-center text-lg">
@@ -162,16 +207,15 @@ export default function ProductScanner() {
             Live Camera Feed
           </CardTitle>
           <CardDescription className="text-sm !mt-1">
-            Your camera feed is shown below.
+            Your camera feed is shown below. Point it at an object.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
           <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70">
-            {hasCameraPermission === null && ( // Still checking permission
+            {hasCameraPermission === null && (
                 <Skeleton className="w-full h-full aspect-[4/3]" />
             )}
             <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
-
             {hasCameraPermission === false && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 p-4 text-center">
                     <CameraOff className="h-12 w-12 text-destructive mb-2" />
@@ -183,29 +227,47 @@ export default function ProductScanner() {
           
           <Button 
             type="button" 
-            onClick={handleSimulateScan} 
+            onClick={handleDetectObject} 
             className="w-full"
-            disabled={isLoading || hasCameraPermission === false} // Disable if no camera or loading
+            disabled={isLoading || hasCameraPermission !== true || isDetectingObject}
           >
-            <ScanLine className="mr-2 h-5 w-5" />
-            Simulate Object Scan from Feed
+            {isDetectingObject ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Detecting...
+              </>
+            ) : (
+              <>
+                <Aperture className="mr-2 h-5 w-5" />
+                Detect Object
+              </>
+            )}
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Click "Simulate Object Scan" to auto-fill product details based on a mock detection.
+            Point your camera at an object and click "Detect Object" to try and identify it.
           </p>
-          {hasCameraPermission === false && (
+          {detectionError && (
+            <Alert variant="destructive" className="mt-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Detection Error</AlertTitle>
+              <AlertDescription>{detectionError}</AlertDescription>
+            </Alert>
+          )}
+          {hasCameraPermission === false && !detectionError && ( // Show only if no other detection error is active
              <Alert variant="destructive" className="mt-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Camera Access Required</AlertTitle>
                 <AlertDescription>
-                    Camera access is denied or not available. The live feed cannot be displayed. You can still simulate a scan.
+                    Camera access is denied or not available. The live feed cannot be displayed.
                 </AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
 
-      {/* Scanner Controls and Results (takes 3/5 width on md screens) */}
       <div className="md:col-span-3 space-y-6">
         <Card className="shadow-xl border-border/80 rounded-lg">
           <CardHeader className="bg-card/50 border-b border-border/60 p-4">
@@ -213,11 +275,11 @@ export default function ProductScanner() {
               <ScanSearch className="mr-2 h-5 w-5 text-primary" />
               Product Scanner
             </CardTitle>
-            <CardDescription className="text-sm !mt-1">Enter product details or use simulated scan for an AI-generated description.</CardDescription>
+            <CardDescription className="text-sm !mt-1">Use the camera to detect an object, then get its AI-generated description.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmitProductDescription)} className="space-y-6">
                 <FormField
                   control={form.control}
                   name="productName"
@@ -225,10 +287,10 @@ export default function ProductScanner() {
                     <FormItem>
                       <FormLabel className="flex items-center font-semibold">
                         <Package className="mr-2 h-4 w-4 text-muted-foreground" />
-                        Product Name
+                        Detected Product Name
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Smart Coffee Maker" {...field} className="text-base" />
+                        <Input placeholder="e.g., Smart Coffee Maker" {...field} className="text-base" readOnly={isDetectingObject} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -241,23 +303,23 @@ export default function ProductScanner() {
                     <FormItem>
                       <FormLabel className="flex items-center font-semibold">
                         <Lightbulb className="mr-2 h-4 w-4 text-muted-foreground" />
-                        Context Clues (Optional)
+                        Context Clues (from detection)
                       </FormLabel>
                       <FormControl>
-                        <Textarea placeholder="e.g., brand, features, category like 'kitchen appliance'" {...field} className="text-base min-h-[80px]" />
+                        <Textarea placeholder="e.g., brand, features, category" {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading}>
+                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading || isDetectingObject || !form.getValues("productName")}>
                   {isLoading ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Generating...
+                      Generating Description...
                     </>
                   ) : (
                     <>
@@ -270,7 +332,7 @@ export default function ProductScanner() {
           </CardContent>
         </Card>
 
-        {isLoading && !productInfo && ( // Show skeleton only if no previous data or initial load
+        {isLoading && !productInfo && (
           <Card className="shadow-lg border-border/80 rounded-lg animate-pulse">
             <CardHeader className="p-4">
               <Skeleton className="h-6 w-1/2" />
@@ -284,10 +346,10 @@ export default function ProductScanner() {
           </Card>
         )}
 
-        {error && (
+        {error && ( // This is for description generation error
           <Alert variant="destructive" className="shadow-md border-destructive/50 rounded-lg">
             <AlertTriangle className="h-5 w-5" />
-            <AlertTitle className="font-semibold">Scan Error</AlertTitle>
+            <AlertTitle className="font-semibold">Description Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -310,5 +372,3 @@ export default function ProductScanner() {
     </div>
   );
 }
-
-    
