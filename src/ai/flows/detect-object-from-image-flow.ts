@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview An AI flow to detect the primary object in an image.
+ * @fileOverview An AI flow to detect the primary object in an image, focusing on medicines.
  *
  * - detectObjectFromImage - A function that identifies the main object in an image.
  * - DetectObjectFromImageInput - The input type for the detectObjectFromImage function.
@@ -22,8 +22,8 @@ const DetectObjectFromImageInputSchema = z.object({
 export type DetectObjectFromImageInput = z.infer<typeof DetectObjectFromImageInputSchema>;
 
 const DetectObjectFromImageOutputSchema = z.object({
-  objectName: z.string().describe('The name of the primary object identified in the image. This should be in the requested language if specified.'),
-  contextualClues: z.string().optional().describe('Brief contextual clues about the identified object (e.g., category, typical use). This should be in the requested language if specified.'),
+  objectName: z.string().describe('The name of the primary object identified in the image, ideally the medicine name extracted from text. This should be in the requested language if specified.'),
+  contextualClues: z.string().optional().describe('Brief contextual clues about the identified object (e.g., "blister pack of tablets", "bottle of liquid medicine", "medical cream tube"). This should be in the requested language if specified.'),
 });
 export type DetectObjectFromImageOutput = z.infer<typeof DetectObjectFromImageOutputSchema>;
 
@@ -35,18 +35,16 @@ const prompt = ai.definePrompt({
   name: 'detectObjectFromImagePrompt',
   input: {schema: DetectObjectFromImageInputSchema},
   output: {schema: DetectObjectFromImageOutputSchema},
-  prompt: `You are an AI assistant specialized in identifying objects within images.
+  prompt: `You are an AI assistant specialized in identifying objects within images, with a strong focus on recognizing medicines and medical products.
 {{#if language}}Respond in {{language}}. If the language is 'mr' (Marathi), ensure the object name and contextual clues are in Marathi.{{/if}}
-Analyze the provided image and identify the single, most prominent object.
-Provide the name of this object.
-If possible, also provide a few brief, relevant contextual clues about the object (e.g., "fruit", "electronic device", "kitchen utensil").
-The object name and contextual clues must be in the requested language if specified.
+Analyze the provided image.
+1. Identify the primary object. If it appears to be a medicine (e.g., tablets, capsules, syrup bottle, ointment tube, inhaler, medical packaging), prioritize identifying it as such.
+2. **Crucially, if there is legible text on the object or its packaging that seems to be a product name or medicine name, try to extract and provide this as the objectName.** If no specific medicine name can be read, identify the type of packaging or form (e.g., "blister pack", "syrup bottle").
+3. Provide brief contextual clues about the identified object or its form (e.g., "blister pack of tablets", "bottle of liquid medicine", "medical cream tube", "pharmaceutical product").
+
+The object name (ideally the medicine name from text) and contextual clues must be in the requested language if specified.
 
 Image: {{media url=imageDataUri}}`,
-  // Using a model that supports image input. It's good to be explicit.
-  // The global ai object in genkit.ts might have a default, but this ensures capability.
-  // Ensure your project's configured model in genkit.ts (e.g., Gemini) supports multimodal input.
-  // No specific model override needed here if the default in genkit.ts is already multimodal.
 });
 
 const detectObjectFromImageFlow = ai.defineFlow(
@@ -63,3 +61,4 @@ const detectObjectFromImageFlow = ai.defineFlow(
     return output;
   }
 );
+

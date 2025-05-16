@@ -4,10 +4,10 @@
 import { useState } from 'react';
 import ProductScanner from '@/components/scanwise/ProductScanner';
 import { Button } from '@/components/ui/button';
-import { ShoppingBag } from 'lucide-react';
+import { Pill } from 'lucide-react'; // Changed from ShoppingBag to Pill
 import { useLanguage, Language } from '@/contexts/LanguageContext';
 
-export type DetectionMode = 'general' | 'medicine';
+export type DetectionMode = 'medicine'; // Only medicine mode now
 
 export default function HomePage() {
   const [currentMode, setCurrentMode] = useState<DetectionMode>('medicine'); // Default to medicine mode
@@ -80,14 +80,13 @@ export default function HomePage() {
             </Button>
           </div>
           <div className="flex justify-center space-x-4 mb-8">
-            {/* General Items button removed */}
             <Button
-              variant={currentMode === 'medicine' ? 'default' : 'outline'}
-              onClick={() => setCurrentMode('medicine')}
+              variant={'default'} // Always default as it's the only mode
+              onClick={() => setCurrentMode('medicine')} // Stays medicine mode
               className="px-6 py-3 text-base rounded-lg shadow-md hover:shadow-lg transition-shadow"
               suppressHydrationWarning={true}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-5 w-5 lucide lucide-pilz"><path d="M10 6.5c0-2.5-1.5-2-1.5-2s0-1-1.5-1-2.5 1.5-2.5 1.5S3 6.5 3 9c0 2.5 3 3 3.5 3S10 9 10 9s-1.5-1-1.5-2.5Z"/><path d="M10.5 9c0 1 .5 2.5.5 2.5S13 13 13 14H4.5c0-2.5.5-5 .5-5"/><path d="M13 14s0 .5.5.5.5.5.5.5 1 0 1 0V9.5s-1.5-1.5-1.5-1.5-1 .5-1 .5.5 2 .5 2Z"/><path d="M13 14s1.5 2.5 1.5 2.5S16 18 18 18s3-1.5 3-1.5-1.5-1-1.5-1 0-1.5 0-1.5-1-3.5-1-3.5-1-1-1-1Z"/><path d="m17.5 10-1 2.5h4l-1-2.5Z"/><path d="M21.5 10.5c0-1-1-2.5-1-2.5s-1-1.5-2.5-1.5-2.5 1.5-2.5 1.5.5 1 .5 1"/></svg>
+              <Pill className="mr-2 h-5 w-5" /> {/* Changed to Pill icon */}
               {t('medicinesButton')}
             </Button>
           </div>
@@ -102,3 +101,4 @@ export default function HomePage() {
     </div>
   );
 }
+
