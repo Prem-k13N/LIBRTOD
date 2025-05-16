@@ -13,56 +13,82 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff } from 'lucide-react';
-import { getProductDescriptionAction, detectObjectAction } from '@/app/actions';
+import { Video, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, CameraOff, Pill, HelpCircle } from 'lucide-react';
+import { getProductDescriptionAction, detectObjectAction, getMedicineInfoAction } from '@/app/actions';
+import type { DetectionMode } from '@/app/page';
 import { useToast } from "@/hooks/use-toast";
 
-
-const ProductScanSchema = z.object({
-  productName: z.string().min(2, { message: "Product name must be at least 2 characters." }).max(100, {message: "Product name must be 100 characters or less."}),
+const ItemScanSchema = z.object({
+  itemName: z.string().min(2, { message: "Item name must be at least 2 characters." }).max(100, {message: "Item name must be 100 characters or less."}),
   contextClues: z.string().max(500, {message: "Context clues must be 500 characters or less."}).optional(),
 });
 
-type ProductScanFormData = z.infer<typeof ProductScanSchema>;
+type ItemScanFormData = z.infer<typeof ItemScanSchema>;
 
-interface ProductInfo {
+interface GeneralScanResult {
+  type: 'general';
   name: string;
   description: string;
 }
 
-const AUTO_DETECT_INTERVAL = 7000; // 7 seconds
+interface MedicineScanResult {
+  type: 'medicine';
+  name: string;
+  usage: string;
+  commonBrands?: string;
+  precautions?: string;
+  disclaimer?: string;
+}
 
-export default function ProductScanner() {
-  const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [isLoadingDescription, setIsLoadingDescription] = useState(false); // For description generation
-  const [descriptionError, setDescriptionError] = useState<string | null>(null); // For description generation
-  const [isDetectingObject, setIsDetectingObject] = useState(false); // For object detection
-  const [detectionError, setDetectionError] = useState<string | null>(null); // For object detection
+type ScanResult = GeneralScanResult | MedicineScanResult | null;
+
+const AUTO_DETECT_INTERVAL = 7000; 
+
+interface ProductScannerProps {
+  mode: DetectionMode;
+}
+
+export default function ProductScanner({ mode }: ProductScannerProps) {
+  const [scanResult, setScanResult] = useState<ScanResult>(null);
+  const [isLoading, setIsLoading] = useState(false); 
+  const [error, setError] = useState<string | null>(null); 
+
+  const [isDetectingObject, setIsDetectingObject] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
 
-  const form = useForm<ProductScanFormData>({
-    resolver: zodResolver(ProductScanSchema),
+  const form = useForm<ItemScanFormData>({
+    resolver: zodResolver(ItemScanSchema),
     defaultValues: {
-      productName: '',
+      itemName: '',
       contextClues: '',
     },
   });
 
+  useEffect(() => {
+    form.reset({ itemName: '', contextClues: '' });
+    setScanResult(null);
+    setError(null);
+    setDetectionError(null);
+  }, [mode, form]);
+
+
   const handleAutoDetectObject = useCallback(async () => {
-    if (!videoRef.current || hasCameraPermission !== true || !navigator.mediaDevices) {
-      // console.log("Conditions not met for auto-detection.");
+    if (!videoRef.current || hasCameraPermission !== true || !navigator.mediaDevices || isDetectingObject) {
       return;
     }
 
-    // console.log("Attempting auto-detection...");
     setIsDetectingObject(true);
-    // Don't clear detectionError here, let new errors overwrite or successful detection clear it implicitly
-    // setDetectionError(null); // Keep previous error until new status
-
+    
     const video = videoRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log("Video dimensions not yet available for capture.");
+        setIsDetectingObject(false);
+        return;
+    }
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -92,17 +118,16 @@ export default function ProductScanner() {
     const result = await detectObjectAction({ imageDataUri });
 
     if (result.success && result.data) {
-      form.setValue('productName', result.data.objectName, { shouldValidate: true });
+      form.setValue('itemName', result.data.objectName, { shouldValidate: true });
       form.setValue('contextClues', result.data.contextualClues || '', { shouldValidate: true });
       toast({
         title: 'Object Auto-Detected!',
-        description: `Identified: ${result.data.objectName}. You can now get its AI description.`,
+        description: `Identified: ${result.data.objectName}. You can now get its AI details.`,
       });
-      setDetectionError(null); // Clear previous error on success
+      setDetectionError(null); 
     } else {
       const errorMessage = result.error || 'AI failed to detect object from image.';
-      setDetectionError(errorMessage); // Keep this error displayed
-      // Do not clear form fields, keep last known good detection or user input
+      setDetectionError(errorMessage); 
       toast({
         variant: 'destructive',
         title: 'Auto-Detection Failed',
@@ -110,7 +135,7 @@ export default function ProductScanner() {
       });
     }
     setIsDetectingObject(false);
-  }, [hasCameraPermission, form, toast]); // Removed isDetectingObject from deps to avoid loop, guard is inside
+  }, [hasCameraPermission, form, toast, isDetectingObject]);
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -170,56 +195,61 @@ export default function ProductScanner() {
     let intervalId: NodeJS.Timeout | null = null;
 
     if (hasCameraPermission === true && !isDetectingObject) {
-      // Initial detection attempt shortly after permission is granted and camera is ready
       const initialDetectionTimeout = setTimeout(() => {
-         if (!isDetectingObject) handleAutoDetectObject();
-      }, 1500); // Delay to allow camera to initialize fully
+         if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA) handleAutoDetectObject();
+      }, 1500); 
 
       intervalId = setInterval(() => {
-        if (!isDetectingObject) { // Check again before calling
+        if (!isDetectingObject && videoRef.current && videoRef.current.readyState >= videoRef.current.HAVE_METADATA) { 
            handleAutoDetectObject();
         }
       }, AUTO_DETECT_INTERVAL);
 
       return () => {
         clearTimeout(initialDetectionTimeout);
-        if (intervalId) {
-          clearInterval(intervalId);
-        }
+        if (intervalId) clearInterval(intervalId);
       };
     }
-     else if (intervalId) { // Clear interval if conditions are no longer met
-        clearInterval(intervalId);
-     }
-
-
-    return () => { // General cleanup
-        if (intervalId) {
-          clearInterval(intervalId);
-        }
-      };
+    return () => { if (intervalId) clearInterval(intervalId); };
   }, [hasCameraPermission, handleAutoDetectObject, isDetectingObject]);
 
 
-  const onSubmitProductDescription: SubmitHandler<ProductScanFormData> = async (data) => {
-    setIsLoadingDescription(true);
-    setDescriptionError(null);
-    setProductInfo(null);
+  const onSubmitItemInfo: SubmitHandler<ItemScanFormData> = async (data) => {
+    setIsLoading(true);
+    setError(null);
+    setScanResult(null);
 
-    const result = await getProductDescriptionAction({
-      productName: data.productName,
-      contextClues: data.contextClues,
-    });
-
-    if (result.success && result.data) {
-      setProductInfo({ name: data.productName, description: result.data.description });
-    } else {
-      setDescriptionError(result.error || "Failed to get product description.");
-      setProductInfo(null);
+    if (mode === 'general') {
+      const result = await getProductDescriptionAction({
+        productName: data.itemName,
+        contextClues: data.contextClues,
+      });
+      if (result.success && result.data) {
+        setScanResult({ type: 'general', name: data.itemName, description: result.data.description });
+      } else {
+        setError(result.error || "Failed to get product description.");
+      }
+    } else if (mode === 'medicine') {
+      const result = await getMedicineInfoAction({ medicineName: data.itemName });
+      if (result.success && result.data) {
+        setScanResult({
+          type: 'medicine',
+          name: result.data.medicineName,
+          usage: result.data.usage,
+          commonBrands: result.data.commonBrands,
+          precautions: result.data.precautions,
+          disclaimer: "This information is for general knowledge and not a substitute for professional medical advice. Always consult a healthcare provider for medical concerns."
+        });
+      } else {
+        setError(result.error || "Failed to get medicine information.");
+      }
     }
-    setIsLoadingDescription(false);
+    setIsLoading(false);
   };
 
+  const formLabel = mode === 'medicine' ? 'Detected Medicine Name' : 'Detected Product Name';
+  const buttonText = mode === 'medicine' ? 'Get Medicine Info' : 'Get AI Description';
+  const formPlaceholder = mode === 'medicine' ? 'e.g., Ibuprofen' : 'e.g., Smart Coffee Maker';
 
   return (
     <div className="grid md:grid-cols-5 gap-8 items-start">
@@ -230,21 +260,19 @@ export default function ProductScanner() {
             Live Camera Feed
           </CardTitle>
           <CardDescription className="text-sm !mt-1">
-            Point your camera at an object. Detection is automatic.
+            Point your camera at an item. Detection is automatic for {mode} items.
             {isDetectingObject && <span className="italic text-primary"> (Detecting...)</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
           <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70 relative">
-            {hasCameraPermission === null && (
-                <Skeleton className="w-full h-full aspect-[4/3]" />
-            )}
+            {hasCameraPermission === null && <Skeleton className="w-full h-full aspect-[4/3]" />}
             <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
             {hasCameraPermission === false && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 p-4 text-center">
                     <CameraOff className="h-12 w-12 text-destructive mb-2" />
                     <p className="font-semibold text-destructive">Camera Access Denied</p>
-                    <p className="text-xs text-muted-foreground">Please enable camera permissions in your browser settings.</p>
+                    <p className="text-xs text-muted-foreground">Please enable camera permissions.</p>
                 </div>
             )}
              {isDetectingObject && (
@@ -256,10 +284,8 @@ export default function ProductScanner() {
                 </div>
             )}
           </div>
-          
-          {/* Button removed for automatic detection */}
           <p className="text-xs text-muted-foreground text-center">
-            Object detection will occur automatically if the camera is active. Results will appear in the form.
+            Item detection will occur automatically. Results will appear in the form.
           </p>
           {detectionError && (
             <Alert variant="destructive" className="mt-2">
@@ -272,9 +298,7 @@ export default function ProductScanner() {
              <Alert variant="destructive" className="mt-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>
-                    Camera access is denied or not available. The live feed and auto-detection cannot function.
-                </AlertDescription>
+                <AlertDescription>Camera access is needed for auto-detection.</AlertDescription>
             </Alert>
           )}
         </CardContent>
@@ -284,25 +308,25 @@ export default function ProductScanner() {
         <Card className="shadow-xl border-border/80 rounded-lg">
           <CardHeader className="bg-card/50 border-b border-border/60 p-4">
             <CardTitle className="flex items-center text-lg">
-              <ScanSearch className="mr-2 h-5 w-5 text-primary" />
-              Product Scanner
+              {mode === 'medicine' ? <Pill className="mr-2 h-5 w-5 text-primary" /> : <ScanSearch className="mr-2 h-5 w-5 text-primary" />}
+              {mode === 'medicine' ? 'Medicine Identifier' : 'Item Scanner'}
             </CardTitle>
-            <CardDescription className="text-sm !mt-1">Object details are auto-detected. Then, get an AI-generated description.</CardDescription>
+            <CardDescription className="text-sm !mt-1">Detected details appear below. Then, get AI-generated information.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmitProductDescription)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmitItemInfo)} className="space-y-6">
                 <FormField
                   control={form.control}
-                  name="productName"
+                  name="itemName"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center font-semibold">
                         <Package className="mr-2 h-4 w-4 text-muted-foreground" />
-                        Detected Product Name
+                        {formLabel}
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Smart Coffee Maker" {...field} className="text-base" readOnly={isDetectingObject} />
+                        <Input placeholder={formPlaceholder} {...field} className="text-base" readOnly={isDetectingObject} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -318,24 +342,24 @@ export default function ProductScanner() {
                         Context Clues (from detection)
                       </FormLabel>
                       <FormControl>
-                        <Textarea placeholder="e.g., brand, features, category" {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
+                        <Textarea placeholder="e.g., brand, type, visual cues" {...field} className="text-base min-h-[80px]" readOnly={isDetectingObject}/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoadingDescription || isDetectingObject || !form.getValues("productName")}>
-                  {isLoadingDescription ? (
+                <Button type="submit" className="w-full text-base py-3 h-11" disabled={isLoading || isDetectingObject || !form.getValues("itemName")}>
+                  {isLoading ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Generating Description...
+                      Generating...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="mr-2 h-5 w-5" /> Get AI Description
+                      <Sparkles className="mr-2 h-5 w-5" /> {buttonText}
                     </>
                   )}
                 </Button>
@@ -344,7 +368,7 @@ export default function ProductScanner() {
           </CardContent>
         </Card>
 
-        {isLoadingDescription && !productInfo && (
+        {isLoading && !scanResult && (
           <Card className="shadow-lg border-border/80 rounded-lg animate-pulse">
             <CardHeader className="p-4">
               <Skeleton className="h-6 w-1/2" />
@@ -358,25 +382,63 @@ export default function ProductScanner() {
           </Card>
         )}
 
-        {descriptionError && (
+        {error && (
           <Alert variant="destructive" className="shadow-md border-destructive/50 rounded-lg">
             <AlertTriangle className="h-5 w-5" />
-            <AlertTitle className="font-semibold">Description Error</AlertTitle>
-            <AlertDescription>{descriptionError}</AlertDescription>
+            <AlertTitle className="font-semibold">Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {productInfo && (
+        {scanResult && scanResult.type === 'general' && (
           <Card className="shadow-lg border-border/80 rounded-lg">
             <CardHeader className="bg-card/50 border-b border-border/60 p-4">
               <CardTitle className="flex items-center text-lg">
                 <Info className="mr-2 h-5 w-5 text-accent" />
-                {productInfo.name}
+                {scanResult.name}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
               <h3 className="font-semibold mb-2 text-base text-muted-foreground">AI Generated Description:</h3>
-              <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{productInfo.description}</p>
+              <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.description}</p>
+            </CardContent>
+          </Card>
+        )}
+        
+        {scanResult && scanResult.type === 'medicine' && (
+          <Card className="shadow-lg border-border/80 rounded-lg">
+            <CardHeader className="bg-card/50 border-b border-border/60 p-4">
+              <CardTitle className="flex items-center text-lg">
+                <Pill className="mr-2 h-5 w-5 text-accent" />
+                {scanResult.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h3 className="font-semibold mb-1 text-base text-muted-foreground">Typical Usage:</h3>
+                <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.usage}</p>
+              </div>
+              {scanResult.commonBrands && (
+                <div>
+                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">Common Brand Names:</h3>
+                  <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.commonBrands}</p>
+                </div>
+              )}
+              {scanResult.precautions && (
+                <div>
+                  <h3 className="font-semibold mb-1 text-base text-muted-foreground">General Precautions:</h3>
+                  <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{scanResult.precautions}</p>
+                </div>
+              )}
+              {scanResult.disclaimer && (
+                <Alert variant="default" className="mt-4 border-blue-500/50 bg-blue-100/70 dark:bg-blue-900/30">
+                    <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <AlertTitle className="text-blue-700 dark:text-blue-300">Important Disclaimer</AlertTitle>
+                    <AlertDescription className="text-blue-600/90 dark:text-blue-400/90">
+                    {scanResult.disclaimer}
+                    </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         )}

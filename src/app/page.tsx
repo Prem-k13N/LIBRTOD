@@ -1,13 +1,21 @@
+
+"use client"; // Required for useState and event handlers
+
+import { useState } from 'react';
 import ProductScanner from '@/components/scanwise/ProductScanner';
-// import { PackageSearch } from 'lucide-react'; // Icon replaced with custom SVG
+import { Button } from '@/components/ui/button';
+import { ShoppingBag } from 'lucide-react'; 
+
+export type DetectionMode = 'general' | 'medicine';
 
 export default function HomePage() {
+  const [currentMode, setCurrentMode] = useState<DetectionMode>('general');
+
   return (
     <div className="flex flex-col items-center min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary">
       <div className="flex-grow w-full p-4 md:p-8 flex flex-col items-center">
         <header className="my-8 md:my-12 text-center">
-          <div className="flex items-center justify-center mb-2">
-            {/* Using a simple SVG logo - can remain generic or be updated later if a specific LIBRTOD logo is available */}
+          <div className="flex items-center justify-center mb-4">
             <svg
               width="48"
               height="48"
@@ -44,12 +52,30 @@ export default function HomePage() {
               LIBRTOD
             </h1>
           </div>
-          <p className="text-lg text-muted-foreground">
-            Instantly identify products and get detailed AI descriptions.
+          <p className="text-lg text-muted-foreground mb-6">
+            Instantly identify items and get AI-powered information.
           </p>
+          <div className="flex justify-center space-x-4 mb-8">
+            <Button
+              variant={currentMode === 'general' ? 'default' : 'outline'}
+              onClick={() => setCurrentMode('general')}
+              className="px-6 py-3 text-base rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            >
+              <ShoppingBag className="mr-2 h-5 w-5" /> General Items
+            </Button>
+            <Button
+              variant={currentMode === 'medicine' ? 'default' : 'outline'}
+              onClick={() => setCurrentMode('medicine')}
+              className="px-6 py-3 text-base rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            >
+              {/* Using an inline SVG for a medicine/pill-like icon */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-5 w-5 lucide lucide-pilz"><path d="M10 6.5c0-2.5-1.5-2-1.5-2s0-1-1.5-1-2.5 1.5-2.5 1.5S3 6.5 3 9c0 2.5 3 3 3.5 3S10 9 10 9s-1.5-1-1.5-2.5Z"/><path d="M10.5 9c0 1 .5 2.5.5 2.5S13 13 13 14H4.5c0-2.5.5-5 .5-5"/><path d="M13 14s0 .5.5.5.5.5.5.5 1 0 1 0V9.5s-1.5-1.5-1.5-1.5-1 .5-1 .5.5 2 .5 2Z"/><path d="M13 14s1.5 2.5 1.5 2.5S16 18 18 18s3-1.5 3-1.5-1.5-1-1.5-1 0-1.5 0-1.5-1-3.5-1-3.5-1-1-1-1Z"/><path d="m17.5 10-1 2.5h4l-1-2.5Z"/><path d="M21.5 10.5c0-1-1-2.5-1-2.5s-1-1.5-2.5-1.5-2.5 1.5-2.5 1.5.5 1 .5 1"/></svg>
+               Medicines
+            </Button>
+          </div>
         </header>
-        <main className="w-full max-w-5xl"> {/* Increased max-width slightly */}
-          <ProductScanner />
+        <main className="w-full max-w-5xl">
+          <ProductScanner mode={currentMode} />
         </main>
       </div>
       <footer className="w-full py-6 text-center text-sm text-muted-foreground border-t">

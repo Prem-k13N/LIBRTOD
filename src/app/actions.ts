@@ -4,6 +4,7 @@
 
 import { generateProductDescription, type GenerateProductDescriptionInput, type GenerateProductDescriptionOutput } from '@/ai/flows/generate-product-description';
 import { detectObjectFromImage, type DetectObjectFromImageInput, type DetectObjectFromImageOutput } from '@/ai/flows/detect-object-from-image-flow';
+import { getMedicineInfo, type GetMedicineInfoInput, type GetMedicineInfoOutput } from '@/ai/flows/get-medicine-info-flow'; // New import
 
 interface ActionResult<T> {
   success: boolean;
@@ -51,5 +52,25 @@ export async function detectObjectAction(input: DetectObjectFromImageInput): Pro
       return { success: false, error: `AI service error: ${error.message}` };
     }
     return { success: false, error: "An unknown error occurred while detecting the object." };
+  }
+}
+
+export async function getMedicineInfoAction(input: GetMedicineInfoInput): Promise<ActionResult<GetMedicineInfoOutput>> {
+  try {
+    if (!input.medicineName || input.medicineName.trim().length < 2) {
+      return { success: false, error: "Medicine name must be at least 2 characters long." };
+    }
+    if (input.medicineName.trim().length > 100) {
+        return { success: false, error: "Medicine name must be 100 characters or less." };
+    }
+
+    const result = await getMedicineInfo(input);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in getMedicineInfoAction:", error);
+    if (error instanceof Error) {
+      return { success: false, error: `AI service error: ${error.message}` };
+    }
+    return { success: false, error: "An unknown error occurred while fetching medicine information." };
   }
 }
