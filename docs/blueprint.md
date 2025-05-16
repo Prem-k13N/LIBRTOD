@@ -1,4 +1,4 @@
-# **App Name**: ScanWise
+# **App Name**: LIBRTOD
 
 ## Core Features:
 
