@@ -1,7 +1,8 @@
+
 // src/components/scanwise/ProductScanner.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,8 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Camera, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles } from 'lucide-react';
+import { Camera, ScanSearch, Lightbulb, Info, AlertTriangle, Package, Sparkles, ScanLine } from 'lucide-react';
 import { getProductDescriptionAction } from '@/app/actions';
+import { useToast } from "@/hooks/use-toast";
+
 
 const ProductScanSchema = z.object({
   productName: z.string().min(2, { message: "Product name must be at least 2 characters." }).max(100, {message: "Product name must be 100 characters or less."}),
@@ -28,11 +31,20 @@ interface ProductInfo {
   description: string;
 }
 
+const mockDetectedObjects = [
+  { name: 'Organic Red Apple', clues: 'Fresh fruit, grocery item, healthy snack, produce section' },
+  { name: 'Ergonomic Wireless Mouse', clues: 'Computer peripheral, electronics, office accessory, Bluetooth connectivity' },
+  { name: 'Handmade Ceramic Mug', clues: 'Kitchenware, beverage container, artisanal, coffee or tea' },
+  { name: 'Spiral Bound Notebook', clues: 'Stationery, office supplies, for writing or drawing, A5 size' },
+  { name: 'Bluetooth Headphones', clues: 'Audio device, electronics, over-ear, noise-cancelling' },
+];
+
 export default function ProductScanner() {
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTimestamp, setCurrentTimestamp] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     // Generate timestamp client-side to avoid hydration mismatch for placeholder image
@@ -70,6 +82,22 @@ export default function ProductScanner() {
     setIsLoading(false);
   };
 
+  const handleSimulateScan = () => {
+    setError(null); // Clear previous errors
+    setProductInfo(null); // Clear previous product info
+
+    const randomIndex = Math.floor(Math.random() * mockDetectedObjects.length);
+    const detectedObject = mockDetectedObjects[randomIndex];
+
+    form.setValue('productName', detectedObject.name, { shouldValidate: true });
+    form.setValue('contextClues', detectedObject.clues, { shouldValidate: true });
+    
+    toast({
+      title: "Object Detected",
+      description: `Product fields populated with: ${detectedObject.name}`,
+    });
+  };
+
   return (
     <div className="grid md:grid-cols-5 gap-8 items-start">
       {/* Simulated Camera View (takes 2/5 width on md screens) */}
@@ -83,7 +111,7 @@ export default function ProductScanner() {
             Illustrative live camera feed.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
           <div className="aspect-[4/3] bg-muted/50 rounded-md flex items-center justify-center overflow-hidden border border-dashed border-border/70">
             {currentTimestamp ? (
                  <Image
@@ -99,8 +127,17 @@ export default function ProductScanner() {
                 <Skeleton className="w-full h-full aspect-[4/3]" />
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-3 text-center">
-            In a full version, objects would be detected and scanned directly from the camera feed.
+          <Button 
+            type="button" 
+            onClick={handleSimulateScan} 
+            className="w-full"
+            disabled={isLoading}
+          >
+            <ScanLine className="mr-2 h-5 w-5" />
+            Simulate Object Scan
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            Click "Simulate Object Scan" to auto-fill product details.
           </p>
         </CardContent>
       </Card>
@@ -113,7 +150,7 @@ export default function ProductScanner() {
               <ScanSearch className="mr-2 h-5 w-5 text-primary" />
               Product Scanner
             </CardTitle>
-            <CardDescription className="text-sm !mt-1">Enter product details for an AI-generated description.</CardDescription>
+            <CardDescription className="text-sm !mt-1">Enter product details or use simulated scan for an AI-generated description.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
@@ -210,3 +247,4 @@ export default function ProductScanner() {
     </div>
   );
 }
+
